@@ -133,6 +133,11 @@ class AnalysisWidget(QWidget):
         self._method_combo.addItem("Phase Correlation", TrackingMethod.PHASE_CORRELATION)
         self._method_combo.addItem("Optical Flow", TrackingMethod.OPTICAL_FLOW)
         self._method_combo.addItem("Template Matching", TrackingMethod.TEMPLATE_MATCHING)
+        self._method_combo.setToolTip(
+            "Phase Correlation: Fast, good for small displacements\n"
+            "Optical Flow: Tracks feature points, good for complex motion\n"
+            "Template Matching: Tracks specific pattern, most accurate"
+        )
         method_layout.addWidget(self._method_combo)
 
         layout.addWidget(method_group)
@@ -142,13 +147,19 @@ class AnalysisWidget(QWidget):
         roi_layout = QVBoxLayout(roi_group)
 
         self._roi_btn = QPushButton("Select ROI")
-        self._roi_btn.setToolTip("Click and drag on video to select tracking region")
+        self._roi_btn.setToolTip(
+            "Define a region to track.\n"
+            "Smaller regions = faster tracking.\n"
+            "Select area with consistent features."
+        )
         roi_layout.addWidget(self._roi_btn)
 
         self._roi_label = QLabel("ROI: Not set")
+        self._roi_label.setToolTip("Current tracking region coordinates")
         roi_layout.addWidget(self._roi_label)
 
         self._clear_roi_btn = QPushButton("Clear ROI")
+        self._clear_roi_btn.setToolTip("Remove ROI and track entire frame")
         roi_layout.addWidget(self._clear_roi_btn)
 
         layout.addWidget(roi_group)
@@ -159,9 +170,17 @@ class AnalysisWidget(QWidget):
 
         self._start_tracking_btn = QPushButton("Start Tracking")
         self._start_tracking_btn.setCheckable(True)
+        self._start_tracking_btn.setToolTip(
+            "Begin motion tracking during playback.\n"
+            "Measures displacement from reference frame."
+        )
         control_layout.addWidget(self._start_tracking_btn)
 
         self._set_reference_btn = QPushButton("Set Reference Frame")
+        self._set_reference_btn.setToolTip(
+            "Use current frame as the reference point.\n"
+            "All motion is measured relative to this frame."
+        )
         control_layout.addWidget(self._set_reference_btn)
 
         layout.addWidget(control_group)
@@ -171,15 +190,23 @@ class AnalysisWidget(QWidget):
         results_layout = QVBoxLayout(results_group)
 
         self._displacement_label = QLabel("Displacement: --")
+        self._displacement_label.setToolTip("Distance moved from reference position (pixels)")
         results_layout.addWidget(self._displacement_label)
 
         self._velocity_label = QLabel("Velocity: --")
+        self._velocity_label.setToolTip("Speed of motion (pixels per frame)")
         results_layout.addWidget(self._velocity_label)
 
         self._vibration_btn = QPushButton("Analyze Vibration")
+        self._vibration_btn.setToolTip(
+            "Perform FFT analysis on tracked motion.\n"
+            "Identifies dominant vibration frequencies.\n"
+            "Requires sufficient tracking data first."
+        )
         results_layout.addWidget(self._vibration_btn)
 
         self._vibration_label = QLabel("Dominant freq: --")
+        self._vibration_label.setToolTip("Primary vibration frequency detected (Hz)")
         results_layout.addWidget(self._vibration_label)
 
         layout.addWidget(results_group)
@@ -187,6 +214,10 @@ class AnalysisWidget(QWidget):
         # Export
         export_layout = QHBoxLayout()
         self._export_motion_btn = QPushButton("Export CSV")
+        self._export_motion_btn.setToolTip(
+            "Export tracking data to CSV file.\n"
+            "Includes frame numbers, displacements, and velocities."
+        )
         export_layout.addWidget(self._export_motion_btn)
         layout.addLayout(export_layout)
 
@@ -205,7 +236,12 @@ class AnalysisWidget(QWidget):
 
         cal_btn_layout = QHBoxLayout()
         self._calibrate_btn = QPushButton("Calibrate")
-        self._calibrate_btn.setToolTip("Draw a line of known length to calibrate")
+        self._calibrate_btn.setToolTip(
+            "Click to enter calibration mode.\n"
+            "1. Click two points on something of known size\n"
+            "2. Enter the real-world distance below\n"
+            "3. All measurements will use this scale"
+        )
         cal_btn_layout.addWidget(self._calibrate_btn)
         cal_layout.addLayout(cal_btn_layout)
 
@@ -215,14 +251,20 @@ class AnalysisWidget(QWidget):
         self._ref_distance_spin.setRange(0.1, 10000)
         self._ref_distance_spin.setValue(10.0)
         self._ref_distance_spin.setDecimals(2)
+        self._ref_distance_spin.setToolTip(
+            "Enter the real-world length of your calibration line.\n"
+            "Set this BEFORE clicking Calibrate."
+        )
         ref_layout.addWidget(self._ref_distance_spin)
 
         self._unit_combo = QComboBox()
         self._unit_combo.addItems(["mm", "cm", "inch", "px"])
+        self._unit_combo.setToolTip("Unit of measurement for calibration and results")
         ref_layout.addWidget(self._unit_combo)
         cal_layout.addLayout(ref_layout)
 
         self._cal_status_label = QLabel("Not calibrated")
+        self._cal_status_label.setToolTip("Current calibration status (pixels per unit)")
         cal_layout.addWidget(self._cal_status_label)
 
         layout.addWidget(cal_group)
@@ -233,25 +275,39 @@ class AnalysisWidget(QWidget):
 
         self._distance_btn = QPushButton("Distance")
         self._distance_btn.setCheckable(True)
-        self._distance_btn.setToolTip("Measure distance between two points")
+        self._distance_btn.setToolTip(
+            "Measure distance between two points.\n"
+            "Click start point, then end point on the video."
+        )
         tools_layout.addWidget(self._distance_btn)
 
         self._angle_btn = QPushButton("Angle")
         self._angle_btn.setCheckable(True)
-        self._angle_btn.setToolTip("Measure angle between three points")
+        self._angle_btn.setToolTip(
+            "Measure angle between three points.\n"
+            "Click: first arm end → vertex → second arm end.\n"
+            "Angle is measured at the middle (vertex) point."
+        )
         tools_layout.addWidget(self._angle_btn)
 
         self._rectangle_btn = QPushButton("Rectangle")
         self._rectangle_btn.setCheckable(True)
-        self._rectangle_btn.setToolTip("Measure rectangular area")
+        self._rectangle_btn.setToolTip(
+            "Measure rectangular area.\n"
+            "Click two opposite corners of the rectangle."
+        )
         tools_layout.addWidget(self._rectangle_btn)
 
         self._circle_btn = QPushButton("Circle")
         self._circle_btn.setCheckable(True)
-        self._circle_btn.setToolTip("Measure circular area")
+        self._circle_btn.setToolTip(
+            "Measure circular area.\n"
+            "Click center point, then any point on the edge."
+        )
         tools_layout.addWidget(self._circle_btn)
 
         self._clear_measurements_btn = QPushButton("Clear All")
+        self._clear_measurements_btn.setToolTip("Remove all measurements from the video")
         tools_layout.addWidget(self._clear_measurements_btn)
 
         layout.addWidget(tools_group)
@@ -261,9 +317,11 @@ class AnalysisWidget(QWidget):
         list_layout = QVBoxLayout(list_group)
 
         self._measurements_label = QLabel("No measurements")
+        self._measurements_label.setToolTip("List of all measurements taken")
         list_layout.addWidget(self._measurements_label)
 
         self._export_measurements_btn = QPushButton("Export")
+        self._export_measurements_btn.setToolTip("Save all measurements to JSON file")
         list_layout.addWidget(self._export_measurements_btn)
 
         layout.addWidget(list_group)
@@ -287,6 +345,7 @@ class AnalysisWidget(QWidget):
         self._brightness_slider = QSlider(Qt.Orientation.Horizontal)
         self._brightness_slider.setRange(-100, 100)
         self._brightness_slider.setValue(0)
+        self._brightness_slider.setToolTip("Adjust image brightness (-100 to +100)")
         bright_layout.addWidget(self._brightness_slider)
         self._brightness_value = QLabel("0")
         self._brightness_value.setMinimumWidth(30)
@@ -299,6 +358,10 @@ class AnalysisWidget(QWidget):
         self._contrast_slider = QSlider(Qt.Orientation.Horizontal)
         self._contrast_slider.setRange(50, 200)
         self._contrast_slider.setValue(100)
+        self._contrast_slider.setToolTip(
+            "Adjust image contrast (0.5x to 2.0x).\n"
+            "Higher = more difference between light and dark."
+        )
         contrast_layout.addWidget(self._contrast_slider)
         self._contrast_value = QLabel("1.0")
         self._contrast_value.setMinimumWidth(30)
@@ -311,6 +374,11 @@ class AnalysisWidget(QWidget):
         self._gamma_slider = QSlider(Qt.Orientation.Horizontal)
         self._gamma_slider.setRange(50, 200)
         self._gamma_slider.setValue(100)
+        self._gamma_slider.setToolTip(
+            "Adjust gamma curve (0.5 to 2.0).\n"
+            "< 1.0 = brighter midtones\n"
+            "> 1.0 = darker midtones"
+        )
         gamma_layout.addWidget(self._gamma_slider)
         self._gamma_value = QLabel("1.0")
         self._gamma_value.setMinimumWidth(30)
@@ -318,6 +386,7 @@ class AnalysisWidget(QWidget):
         bc_layout.addLayout(gamma_layout)
 
         self._auto_bc_btn = QPushButton("Auto")
+        self._auto_bc_btn.setToolTip("Automatically optimize brightness and contrast")
         bc_layout.addWidget(self._auto_bc_btn)
 
         layout.addWidget(bc_group)
@@ -327,9 +396,18 @@ class AnalysisWidget(QWidget):
         hist_layout = QVBoxLayout(hist_group)
 
         self._hist_eq_check = QCheckBox("Histogram Equalization")
+        self._hist_eq_check.setToolTip(
+            "Spread pixel values across full range.\n"
+            "Improves contrast in low-contrast images."
+        )
         hist_layout.addWidget(self._hist_eq_check)
 
         self._clahe_check = QCheckBox("CLAHE (Adaptive)")
+        self._clahe_check.setToolTip(
+            "Contrast Limited Adaptive Histogram Equalization.\n"
+            "Better than standard equalization for local contrast.\n"
+            "Prevents over-amplification of noise."
+        )
         hist_layout.addWidget(self._clahe_check)
 
         layout.addWidget(hist_group)
@@ -339,12 +417,18 @@ class AnalysisWidget(QWidget):
         filter_layout = QVBoxLayout(filter_group)
 
         self._sharpen_check = QCheckBox("Sharpen")
+        self._sharpen_check.setToolTip("Enhance edges and fine details")
         filter_layout.addWidget(self._sharpen_check)
 
         self._denoise_check = QCheckBox("Denoise")
+        self._denoise_check.setToolTip(
+            "Reduce image noise (slower processing).\n"
+            "Useful for low-light or high-ISO footage."
+        )
         filter_layout.addWidget(self._denoise_check)
 
         self._edge_check = QCheckBox("Edge Enhance")
+        self._edge_check.setToolTip("Highlight edges in the image")
         filter_layout.addWidget(self._edge_check)
 
         layout.addWidget(filter_group)
@@ -358,6 +442,7 @@ class AnalysisWidget(QWidget):
         self._zoom_slider = QSlider(Qt.Orientation.Horizontal)
         self._zoom_slider.setRange(10, 100)
         self._zoom_slider.setValue(10)
+        self._zoom_slider.setToolTip("Digital zoom level (1x to 10x)")
         zoom_slider_layout.addWidget(self._zoom_slider)
         self._zoom_value = QLabel("1.0x")
         self._zoom_value.setMinimumWidth(40)
@@ -372,6 +457,7 @@ class AnalysisWidget(QWidget):
 
         # Reset
         self._reset_enhance_btn = QPushButton("Reset All")
+        self._reset_enhance_btn.setToolTip("Reset all enhancement settings to defaults")
         layout.addWidget(self._reset_enhance_btn)
 
         layout.addStretch()

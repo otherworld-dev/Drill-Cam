@@ -58,6 +58,11 @@ class ControlsPanel(QWidget):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel("Mode:"))
         self._mode_combo = QComboBox()
+        self._mode_combo.setToolTip(
+            "Select camera resolution and frame rate.\n"
+            "Higher FPS = more detail for fast motion.\n"
+            "Higher resolution = more detail but lower FPS."
+        )
         for key, mode in CAMERA_MODES.items():
             self._mode_combo.addItem(
                 f"{mode.name} ({mode.width}x{mode.height} @ {mode.fps}fps)",
@@ -74,6 +79,7 @@ class ControlsPanel(QWidget):
         # Start/Stop button
         self._camera_btn = QPushButton("Start Camera")
         self._camera_btn.setCheckable(True)
+        self._camera_btn.setToolTip("Start or stop the live camera feed")
         self._camera_btn.clicked.connect(self._on_camera_btn_clicked)
         camera_layout.addWidget(self._camera_btn)
 
@@ -89,6 +95,11 @@ class ControlsPanel(QWidget):
         self._preroll_spin = QSpinBox()
         self._preroll_spin.setRange(0, 30)
         self._preroll_spin.setValue(2)
+        self._preroll_spin.setToolTip(
+            "Seconds of footage to keep BEFORE you press Record.\n"
+            "Useful for capturing events that already happened.\n"
+            "The buffer continuously stores recent frames."
+        )
         preroll_layout.addWidget(self._preroll_spin)
         record_layout.addLayout(preroll_layout)
 
@@ -96,6 +107,11 @@ class ControlsPanel(QWidget):
         self._record_btn = QPushButton("Record")
         self._record_btn.setCheckable(True)
         self._record_btn.setEnabled(False)
+        self._record_btn.setToolTip(
+            "Start/stop recording video.\n"
+            "Includes pre-record buffer when stopped.\n"
+            "Video saved as lossless FFV1 in MKV container."
+        )
         self._record_btn.clicked.connect(self._on_record_btn_clicked)
         self._record_btn.setStyleSheet(
             "QPushButton:checked { background-color: #c0392b; color: white; }"
@@ -105,6 +121,7 @@ class ControlsPanel(QWidget):
         # Snapshot button
         self._snapshot_btn = QPushButton("Snapshot")
         self._snapshot_btn.setEnabled(False)
+        self._snapshot_btn.setToolTip("Capture a single frame as PNG image")
         self._snapshot_btn.clicked.connect(self.snapshot_requested.emit)
         record_layout.addWidget(self._snapshot_btn)
 
@@ -115,16 +132,26 @@ class ControlsPanel(QWidget):
         status_layout = QVBoxLayout(status_group)
 
         self._fps_label = QLabel("FPS: --")
+        self._fps_label.setToolTip("Current capture frame rate (frames per second)")
         status_layout.addWidget(self._fps_label)
 
         self._frames_label = QLabel("Frames: 0")
+        self._frames_label.setToolTip("Total frames captured this session")
         status_layout.addWidget(self._frames_label)
 
         self._buffer_label = QLabel("Buffer: 0 / 0")
+        self._buffer_label.setToolTip(
+            "Ring buffer status (current frames / capacity).\n"
+            "Used for pre-record feature."
+        )
         status_layout.addWidget(self._buffer_label)
 
         self._dropped_label = QLabel("Dropped: 0")
         self._dropped_label.setStyleSheet("color: #666;")
+        self._dropped_label.setToolTip(
+            "Frames dropped due to processing delays.\n"
+            "High numbers may indicate system is too slow."
+        )
         status_layout.addWidget(self._dropped_label)
 
         layout.addWidget(status_group)
@@ -135,10 +162,12 @@ class ControlsPanel(QWidget):
 
         self._crosshair_check = QCheckBox("Show crosshair")
         self._crosshair_check.setChecked(True)
+        self._crosshair_check.setToolTip("Display center crosshair on live preview")
         display_layout.addWidget(self._crosshair_check)
 
         self._info_check = QCheckBox("Show info overlay")
         self._info_check.setChecked(True)
+        self._info_check.setToolTip("Display FPS and frame info on live preview")
         display_layout.addWidget(self._info_check)
 
         layout.addWidget(display_group)

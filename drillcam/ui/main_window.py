@@ -34,6 +34,7 @@ from .preview_widget import PreviewWidget
 from .controls_panel import ControlsPanel
 from .playback_widget import PlaybackWidget
 from .analysis_widget import AnalysisWidget
+from .media_browser import MediaBrowserWidget
 from .dialogs.progress_dialog import EncodingProgressDialog
 from ..core.playback_engine import VideoInfo
 
@@ -127,11 +128,25 @@ class MainWindow(QMainWindow):
         playback_layout.addWidget(playback_splitter)
         self._tab_widget.addTab(playback_widget, "Playback & Analysis")
 
+        # Media browser tab
+        self._media_browser = MediaBrowserWidget(self._settings.output_dir)
+        self._tab_widget.addTab(self._media_browser, "Media")
+
+        # Connect media browser signals
+        self._media_browser.open_video_requested.connect(self._on_open_video_from_browser)
+        self._media_browser.open_snapshot_requested.connect(self._on_open_snapshot)
+
         # Connect tab change
         self._tab_widget.currentChanged.connect(self._on_tab_changed)
 
         # Connect analysis signals
         self._analysis.enhancement_changed.connect(self._on_enhancement_changed)
+        self._analysis.measurement_mode_changed.connect(self._on_measurement_mode_changed)
+        self._analysis.calibration_requested.connect(self._on_calibration_requested)
+
+        # Connect playback to measurement system
+        self._playback.set_measurement_system(self._analysis.measurement_system)
+        self._playback.point_clicked.connect(self._on_playback_point_clicked)
 
         # Status bar
         self._status_bar = QStatusBar()
@@ -454,7 +469,8 @@ class MainWindow(QMainWindow):
             "About DrillCam",
             "DrillCam v0.1.0\n\n"
             "High-speed camera application for monitoring drilling conditions.\n\n"
-            "Designed for OV9281 global shutter camera on Raspberry Pi.",
+            "Designed for OV9281 global shutter camera on Raspberry Pi.\n\n"
+            "Designed by Adam Morgan\nOtherWorld.Dev",
         )
 
     @Slot()
@@ -482,9 +498,13 @@ class MainWindow(QMainWindow):
         if index == 0:
             # Live capture tab
             self._status_bar.showMessage("Live capture mode")
-        else:
+        elif index == 1:
             # Playback tab
             self._status_bar.showMessage("Playback & Analysis mode")
+        elif index == 2:
+            # Media browser tab
+            self._media_browser.refresh()
+            self._status_bar.showMessage("Media browser")
 
     @Slot()
     def _on_enhancement_changed(self) -> None:
@@ -493,6 +513,81 @@ class MainWindow(QMainWindow):
         # This is a simplified version - full integration would modify
         # the playback widget to apply enhancement before display
         pass
+
+    @Slot(Path)
+    def _on_open_video_from_browser(self, video_path: Path) -> None:
+        """Handle request to open video from media browser."""
+        # Switch to playback tab
+        self._tab_widget.setCurrentIndex(1)
+
+        if self._playback.load_video(video_path):
+            self._status_bar.showMessage(f"Loaded: {video_path.name}")
+        else:
+            QMessageBox.warning(self, "Error", f"Failed to open video: {video_path}")
+
+    @Slot(Path)
+    def _on_open_snapshot(self, snapshot_path: Path) -> None:
+        """Handle request to view snapshot from media browser."""
+        # Open snapshot in a simple dialog for now
+        from PySide6.QtWidgets import QDialog, QLabel
+        from PySide6.QtGui import QPixmap
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(snapshot_path.name)
+        dialog.setMinimumSize(640, 480)
+
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel()
+        pixmap = QPixmap(str(snapshot_path))
+        if not pixmap.isNull():
+            scaled = pixmap.scaled(
+                800, 600,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            label.setPixmap(scaled)
+        else:
+            label.setText("Failed to load image")
+
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
+
+        dialog.exec()
+
+    @Slot(str)
+    def _on_measurement_mode_changed(self, mode: str) -> None:
+        """Handle measurement mode change from analysis widget."""
+        self._playback.set_measurement_mode(mode)
+        if mode:
+            self._status_bar.showMessage(f"Measurement mode: {mode} - click on video to add points")
+        else:
+            self._status_bar.showMessage("Measurement mode disabled")
+
+    @Slot()
+    def _on_calibration_requested(self) -> None:
+        """Handle calibration request - enter calibration mode."""
+        self._playback.set_measurement_mode("calibrate")
+        self._status_bar.showMessage("Calibration: Draw a line of known length on the video")
+
+    @Slot(float, float)
+    def _on_playback_point_clicked(self, x: float, y: float) -> None:
+        """Handle point click on playback widget."""
+        mode = self._playback._measurement_mode
+
+        if mode == "calibrate":
+            # Check if we have 2 points for calibration
+            if len(self._playback._pending_points) >= 2:
+                pixel_dist = self._playback.get_calibration_distance()
+                if pixel_dist > 0:
+                    # Set calibration using the pixel distance
+                    self._analysis.set_calibration(pixel_dist)
+                    self._status_bar.showMessage(f"Calibration set from {pixel_dist:.1f} pixel line")
+                self._playback.clear_pending_points()
+                self._playback.set_measurement_mode("")
+        else:
+            # Update measurements list in analysis widget
+            self._analysis._update_measurements_label()
 
     def closeEvent(self, event) -> None:
         """Handle window close."""
