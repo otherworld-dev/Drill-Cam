@@ -121,26 +121,45 @@ class CameraController:
             if self._is_streaming:
                 self.stop_streaming()
 
-            # Configure for video capture with grayscale output
-            config = self._camera.create_video_configuration(
-                main={
-                    "size": (mode.width, mode.height),
-                    "format": "YUV420",  # Will extract Y plane for grayscale
-                },
-                buffer_count=6,
-                controls={
-                    "FrameDurationLimits": (
-                        mode.frame_duration_us,
-                        mode.frame_duration_us,
-                    ),
-                },
-            )
+            # For high-speed modes, use raw sensor output to minimize processing
+            # For normal modes, use video configuration
+            if mode.fps >= 200:
+                # High-speed: use raw/lores configuration with minimal processing
+                config = self._camera.create_video_configuration(
+                    main={"size": (mode.width, mode.height), "format": "YUV420"},
+                    lores={"size": (mode.width, mode.height), "format": "YUV420"},
+                    buffer_count=8,  # More buffers for high-speed
+                    queue=False,  # Don't queue frames, get latest
+                    controls={
+                        "FrameDurationLimits": (
+                            mode.frame_duration_us,
+                            mode.frame_duration_us,
+                        ),
+                        "NoiseReductionMode": 0,  # Disable noise reduction for speed
+                    },
+                )
+            else:
+                # Normal speed: standard video configuration
+                config = self._camera.create_video_configuration(
+                    main={"size": (mode.width, mode.height), "format": "YUV420"},
+                    buffer_count=6,
+                    controls={
+                        "FrameDurationLimits": (
+                            mode.frame_duration_us,
+                            mode.frame_duration_us,
+                        ),
+                    },
+                )
 
             self._camera.configure(config)
             self._current_mode = mode
+
+            # Log actual sensor mode selected
+            sensor_mode = self._camera.camera_configuration().get("sensor", {})
             logger.info(
                 f"Camera configured: {mode.name} ({mode.width}x{mode.height} @ {mode.fps}fps)"
             )
+            logger.info(f"Sensor configuration: {sensor_mode}")
             return True
 
         except Exception as e:
@@ -216,14 +235,30 @@ class CameraController:
 
         try:
             # Use capture_array for simple access
-            # For higher performance, use request/MappedArray pattern
             array = self._camera.capture_array("main")
 
-            # Extract Y plane (grayscale) from YUV420
-            # Y plane is the first width*height bytes
+            # Handle YUV420 format - extract Y plane (luminance/grayscale)
+            # YUV420 from picamera2 can come in different layouts:
+            # - Shape (h, w, 3) = interleaved, take channel 0
+            # - Shape (h * 1.5, w) = planar, Y is first h rows
+            # - Shape (h, w) = already grayscale
             if len(array.shape) == 3:
-                # If we get YUV, take just Y channel
-                gray = array[:, :, 0] if array.shape[2] >= 1 else array
+                # Interleaved format: take Y channel (first channel)
+                gray = array[:, :, 0]
+            elif len(array.shape) == 2:
+                # Check if this is planar YUV420 (height is 1.5x normal)
+                # If so, Y plane is the first 2/3 of the data
+                h, w = array.shape
+                # Try to detect if it's planar by checking if height seems too large
+                if self._current_mode:
+                    expected_h = self._current_mode.height
+                    if h > expected_h * 1.2:  # Likely planar YUV420
+                        gray = array[:expected_h, :]
+                    else:
+                        gray = array
+                else:
+                    # Assume it's already grayscale
+                    gray = array
             else:
                 gray = array
 
