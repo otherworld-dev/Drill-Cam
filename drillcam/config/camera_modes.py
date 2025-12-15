@@ -30,6 +30,8 @@ class CameraMode:
 
 
 # OV9281 sensor modes
+# Note: Actual output dimensions may vary based on libcamera/sensor config.
+# The frame buffer will auto-resize to match actual camera output.
 CAMERA_MODES = {
     "high_speed": CameraMode(
         name="High Speed",

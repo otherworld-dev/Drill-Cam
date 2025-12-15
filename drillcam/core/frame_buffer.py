@@ -104,7 +104,7 @@ class FrameRingBuffer:
         Write a frame to the buffer.
 
         Args:
-            frame: Grayscale frame data (must match buffer dimensions)
+            frame: Grayscale frame data (will auto-resize buffer if dimensions change)
             timestamp: Frame timestamp
             frame_number: Sequential frame number
 
@@ -112,6 +112,27 @@ class FrameRingBuffer:
             Buffer index where frame was written
         """
         with self._lock:
+            # Check if frame dimensions match buffer
+            frame_h, frame_w = frame.shape[:2]
+            if frame_h != self._height or frame_w != self._width:
+                logger.warning(
+                    f"Frame size changed: {frame_w}x{frame_h} vs buffer {self._width}x{self._height}. "
+                    f"Resizing buffer..."
+                )
+                # Resize buffer to match actual frame dimensions
+                self._width = frame_w
+                self._height = frame_h
+                self._frames = np.zeros((self._capacity, frame_h, frame_w), dtype=np.uint8)
+                # Reset buffer state
+                self._write_idx = 0
+                self._count = 0
+                for meta in self._metadata:
+                    meta.valid = False
+                logger.info(
+                    f"Buffer resized to {self._capacity} frames, "
+                    f"{frame_w}x{frame_h}, {self.memory_usage_mb:.1f} MB"
+                )
+
             idx = self._write_idx
 
             # Copy frame data (single memcpy)
