@@ -286,12 +286,26 @@ class FrameRingBuffer:
         Yields:
             Tuples of (frame_copy, metadata)
         """
+        # Collect frames in order (can't yield while holding lock)
+        frames_found = []
         with self._lock:
-            # Find indices for frame range
+            valid_count = sum(1 for m in self._metadata if m.valid)
+            logger.debug(
+                f"Searching for frames {start_frame}-{end_frame}, "
+                f"buffer has {valid_count} valid frames, count={self._count}"
+            )
+
             for idx in range(self._capacity):
                 meta = self._metadata[idx]
                 if meta.valid and start_frame <= meta.frame_number <= end_frame:
-                    yield self._frames[idx].copy(), meta
+                    frames_found.append((meta.frame_number, self._frames[idx].copy(), meta))
+
+        # Sort by frame number and yield
+        frames_found.sort(key=lambda x: x[0])
+        logger.info(f"Found {len(frames_found)} frames in range {start_frame}-{end_frame}")
+
+        for _, frame, meta in frames_found:
+            yield frame, meta
 
     def clear(self) -> None:
         """Clear all frames from buffer."""

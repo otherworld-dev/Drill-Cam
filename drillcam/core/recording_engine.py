@@ -205,8 +205,16 @@ class RecordingEngine(QObject):
         recording = self._current_recording
         raw_path = recording.raw_path
 
+        # Get actual frame dimensions from buffer (may have changed due to auto-resize)
+        actual_width = self._buffer.width
+        actual_height = self._buffer.height
+
+        # Update recording info with actual dimensions
+        recording.width = actual_width
+        recording.height = actual_height
+
         # Dump frames from buffer to raw storage
-        logger.info(f"Dumping frames {start_frame} to {end_frame}...")
+        logger.info(f"Dumping frames {start_frame} to {end_frame} (size: {actual_width}x{actual_height})...")
 
         frame_idx = 0
         for frame, meta in self._buffer.get_recording_frames(start_frame, end_frame):
@@ -217,7 +225,13 @@ class RecordingEngine(QObject):
             if frame_idx % 100 == 0:
                 self.capture_progress.emit(frame_idx, recording.frame_count)
 
+        # Update actual frame count
+        recording.frame_count = frame_idx
         logger.info(f"Dumped {frame_idx} frames to {raw_path}")
+
+        if frame_idx == 0:
+            self._on_encoding_error("No frames captured")
+            return
 
         # Generate output filename
         timestamp = recording.start_time.strftime("%Y%m%d_%H%M%S")
@@ -228,8 +242,8 @@ class RecordingEngine(QObject):
         self._encoder_thread = EncoderThread(
             raw_path=raw_path,
             output_path=output_path,
-            width=recording.width,
-            height=recording.height,
+            width=actual_width,
+            height=actual_height,
             fps=recording.fps,
         )
         self._encoder_thread.progress.connect(self._on_encoding_progress)
