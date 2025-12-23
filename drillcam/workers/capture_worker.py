@@ -106,20 +106,41 @@ class CaptureWorker(QThread):
             self._running = False
             return
 
+        consecutive_errors = 0
+        max_consecutive_errors = 10
+
         try:
             while self._running:
                 if self._paused:
                     # When paused, still capture but don't store
                     # This keeps the camera pipeline flowing
-                    self._camera.capture_frame()
+                    try:
+                        self._camera.capture_frame()
+                    except Exception:
+                        pass
                     time.sleep(0.001)
                     continue
 
-                # Capture frame
-                frame_data = self._camera.capture_frame()
+                # Capture frame with error tracking
+                try:
+                    frame_data = self._camera.capture_frame()
+                except Exception as e:
+                    consecutive_errors += 1
+                    logger.warning(f"Frame capture exception: {e}")
+                    if consecutive_errors >= max_consecutive_errors:
+                        raise RuntimeError(f"Too many consecutive capture errors: {e}")
+                    time.sleep(0.01)
+                    continue
 
                 if frame_data is None:
+                    consecutive_errors += 1
+                    if consecutive_errors >= max_consecutive_errors:
+                        raise RuntimeError("Camera not returning frames")
+                    time.sleep(0.001)
                     continue
+
+                # Reset error counter on successful capture
+                consecutive_errors = 0
 
                 # Check for dropped frames
                 if self._last_frame_number >= 0:

@@ -121,35 +121,22 @@ class CameraController:
             if self._is_streaming:
                 self.stop_streaming()
 
-            # For high-speed modes, use raw sensor output to minimize processing
-            # For normal modes, use video configuration
-            if mode.fps >= 200:
-                # High-speed: use raw/lores configuration with minimal processing
-                config = self._camera.create_video_configuration(
-                    main={"size": (mode.width, mode.height), "format": "YUV420"},
-                    lores={"size": (mode.width, mode.height), "format": "YUV420"},
-                    buffer_count=8,  # More buffers for high-speed
-                    queue=False,  # Don't queue frames, get latest
-                    controls={
-                        "FrameDurationLimits": (
-                            mode.frame_duration_us,
-                            mode.frame_duration_us,
-                        ),
-                        "NoiseReductionMode": 0,  # Disable noise reduction for speed
-                    },
-                )
-            else:
-                # Normal speed: standard video configuration
-                config = self._camera.create_video_configuration(
-                    main={"size": (mode.width, mode.height), "format": "YUV420"},
-                    buffer_count=6,
-                    controls={
-                        "FrameDurationLimits": (
-                            mode.frame_duration_us,
-                            mode.frame_duration_us,
-                        ),
-                    },
-                )
+            # Configure for video capture
+            # Disable TDN (Temporal Denoise) to avoid Pi 5 backend crash
+            # Use simple configuration without lores stream to avoid conflicts
+            config = self._camera.create_video_configuration(
+                main={"size": (mode.width, mode.height), "format": "YUV420"},
+                buffer_count=4,  # Fewer buffers to reduce memory pressure
+                controls={
+                    "FrameDurationLimits": (
+                        mode.frame_duration_us,
+                        mode.frame_duration_us,
+                    ),
+                },
+            )
+
+            # Disable denoise algorithms that cause TDN conflicts on Pi 5
+            config["controls"]["NoiseReductionMode"] = 0
 
             self._camera.configure(config)
             self._current_mode = mode
