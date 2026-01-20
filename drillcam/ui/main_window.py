@@ -271,27 +271,40 @@ class MainWindow(QMainWindow):
             self._controls.set_camera_running(False)
             return
 
-        # Create and start capture worker
-        self._capture_worker = CaptureWorker(self._camera, self._buffer)
-        self._capture_worker.fps_updated.connect(self._on_fps_updated)
-        self._capture_worker.frame_captured.connect(self._on_frame_captured)
-        self._capture_worker.dropped_frames.connect(self._on_dropped_frames)
-        self._capture_worker.capture_error.connect(self._on_capture_error)
+        try:
+            # Create and start capture worker
+            self._capture_worker = CaptureWorker(self._camera, self._buffer)
+            self._capture_worker.fps_updated.connect(self._on_fps_updated)
+            self._capture_worker.frame_captured.connect(self._on_frame_captured)
+            self._capture_worker.dropped_frames.connect(self._on_dropped_frames)
+            self._capture_worker.capture_error.connect(self._on_capture_error)
 
-        # Create and start preview worker
-        self._preview_worker = PreviewWorker(
-            self._buffer, target_fps=self._settings.preview_fps
-        )
-        self._preview_worker.frame_ready.connect(self._preview.update_frame)
+            # Create and start preview worker
+            self._preview_worker = PreviewWorker(
+                self._buffer, target_fps=self._settings.preview_fps
+            )
+            self._preview_worker.frame_ready.connect(self._preview.update_frame)
 
-        # Start workers
-        self._capture_worker.start()
-        self._preview_worker.start()
+            # Start workers
+            self._capture_worker.start()
+            self._preview_worker.start()
 
-        self._dropped_frames = 0
-        self._controls.set_camera_running(True)
-        self._status_bar.showMessage("Camera running")
-        logger.info("Camera started")
+            self._dropped_frames = 0
+            self._controls.set_camera_running(True)
+            self._status_bar.showMessage("Camera running")
+            logger.info("Camera started")
+
+        except Exception as e:
+            logger.error(f"Failed to start camera: {e}", exc_info=True)
+            # Ensure UI is in correct state on error
+            self._controls.set_camera_running(False)
+            self._status_bar.showMessage(f"Failed to start camera: {e}")
+            QMessageBox.warning(
+                self,
+                "Camera Start Failed",
+                f"Failed to start camera capture:\n{e}\n\n"
+                "Try switching to a different mode or restarting."
+            )
 
     @Slot()
     def _stop_camera(self) -> None:
@@ -338,7 +351,16 @@ class MainWindow(QMainWindow):
             if was_running:
                 self._start_camera()
         else:
-            self._status_bar.showMessage("Failed to change mode")
+            # Configuration failed - ensure UI is in correct state
+            logger.error(f"Failed to configure mode: {mode_key}")
+            self._controls.set_camera_running(False)  # Ensure mode combo is enabled
+            self._status_bar.showMessage(f"Failed to change mode to {mode_key}")
+            QMessageBox.warning(
+                self,
+                "Mode Change Failed",
+                f"Failed to configure camera mode: {mode_key}\n\n"
+                "Check logs for details. Try restarting the application."
+            )
 
     @Slot()
     def _start_recording(self) -> None:
@@ -458,9 +480,21 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _on_capture_error(self, error: str) -> None:
         """Handle capture error."""
+        logger.error(f"Capture error received: {error}")
         self._status_bar.showMessage(f"Capture error: {error}")
-        QMessageBox.warning(self, "Capture Error", error)
+
+        # Stop camera and ensure UI state is reset
         self._stop_camera()
+
+        # Make sure mode combo is enabled (redundant but safe)
+        self._controls.set_camera_running(False)
+
+        QMessageBox.warning(
+            self,
+            "Capture Error",
+            f"Camera capture failed:\n{error}\n\n"
+            "The camera has been stopped. Try switching modes or restarting."
+        )
 
     def _show_about(self) -> None:
         """Show about dialog."""

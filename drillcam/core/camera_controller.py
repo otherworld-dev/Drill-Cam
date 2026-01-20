@@ -121,36 +121,64 @@ class CameraController:
             if self._is_streaming:
                 self.stop_streaming()
 
-            # Configure for video capture
-            # Disable TDN (Temporal Denoise) to avoid Pi 5 backend crash
-            # Use simple configuration without lores stream to avoid conflicts
-            config = self._camera.create_video_configuration(
-                main={"size": (mode.width, mode.height), "format": "YUV420"},
-                buffer_count=4,  # Fewer buffers to reduce memory pressure
-                controls={
-                    "FrameDurationLimits": (
-                        mode.frame_duration_us,
-                        mode.frame_duration_us,
-                    ),
-                },
-            )
-
-            # Disable denoise algorithms that cause TDN conflicts on Pi 5
-            config["controls"]["NoiseReductionMode"] = 0
+            # Configure camera based on mode requirements
+            # High-speed modes (>= 200 fps) need special configuration for performance
+            # Always disable TDN (Temporal Denoise) to avoid Pi 5 backend crash
+            if mode.fps >= 200:
+                # High-speed: optimize for maximum frame rate
+                logger.info(f"Configuring high-speed mode: {mode.fps}fps")
+                config = self._camera.create_video_configuration(
+                    main={"size": (mode.width, mode.height), "format": "YUV420"},
+                    lores={"size": (mode.width, mode.height), "format": "YUV420"},
+                    buffer_count=8,  # More buffers for high-speed throughput
+                    queue=False,  # Get latest frame, don't queue (reduces latency)
+                    controls={
+                        "FrameDurationLimits": (
+                            mode.frame_duration_us,
+                            mode.frame_duration_us,
+                        ),
+                        "NoiseReductionMode": 0,  # Disable for speed and TDN fix
+                    },
+                )
+            else:
+                # Normal speed: standard configuration
+                config = self._camera.create_video_configuration(
+                    main={"size": (mode.width, mode.height), "format": "YUV420"},
+                    buffer_count=6,
+                    controls={
+                        "FrameDurationLimits": (
+                            mode.frame_duration_us,
+                            mode.frame_duration_us,
+                        ),
+                        "NoiseReductionMode": 0,  # Always disable TDN for Pi 5
+                    },
+                )
 
             self._camera.configure(config)
             self._current_mode = mode
 
-            # Log actual sensor mode selected
+            # Log actual sensor mode selected for diagnostics
             sensor_mode = self._camera.camera_configuration().get("sensor", {})
+            sensor_config = self._camera.camera_configuration()
             logger.info(
                 f"Camera configured: {mode.name} ({mode.width}x{mode.height} @ {mode.fps}fps)"
             )
-            logger.info(f"Sensor configuration: {sensor_mode}")
+            logger.info(f"Sensor mode: {sensor_mode}")
+            logger.info(f"Buffer count: {sensor_config.get('buffer_count', 'unknown')}")
+            logger.info(f"Queue mode: {sensor_config.get('queue', 'unknown')}")
+
+            # Validate sensor can achieve requested frame rate
+            sensor_fps = sensor_mode.get("fps", 0) if sensor_mode else 0
+            if sensor_fps > 0 and abs(sensor_fps - mode.fps) > mode.fps * 0.1:
+                logger.warning(
+                    f"Sensor mode FPS ({sensor_fps}) differs from requested "
+                    f"({mode.fps}). Actual performance may vary."
+                )
+
             return True
 
         except Exception as e:
-            logger.error(f"Failed to configure camera: {e}")
+            logger.error(f"Failed to configure camera: {e}", exc_info=True)
             return False
 
     def start_streaming(
